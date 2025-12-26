@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import './App.css'
 import { ScoreViewer } from './components/ScoreViewer'
+import { ScoreViewerScroll } from './components/ScoreViewerScroll'
 import { projectService, type Project } from './services/projectService'
 
 interface Anchor {
@@ -8,17 +9,19 @@ interface Anchor {
   time: number
 }
 
-export type AppMode = 'RECORD' | 'PLAYBACK'
+export type AppMode = 'PLAYBACK' | 'RECORD'
+type ViewMode = 'PAGE' | 'SCROLL'
 
 // Measure 1 always starts at 0:00
 const INITIAL_ANCHORS: Anchor[] = [{ measure: 1, time: 0 }]
-const DEFAULT_AUDIO = '/c-major-exercise.mp3'
+export const DEFAULT_AUDIO = '/c-major-scale.mp3'
 // Default XML handles by ScoreViewer if undefined, but for saving we need to know what to save
 const DEFAULT_XML = '/c-major-exercise.musicxml'
 
 function App() {
+  const [viewMode, setViewMode] = useState<ViewMode>('PAGE')
   const [anchors, setAnchors] = useState<Anchor[]>(INITIAL_ANCHORS)
-  const [mode, setMode] = useState<AppMode>('RECORD')
+  const [mode, setMode] = useState<AppMode>('PLAYBACK')
   const [projects, setProjects] = useState<Project[]>([])
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
   const [currentProjectTitle, setCurrentProjectTitle] = useState<string | null>(null)
@@ -192,7 +195,7 @@ function App() {
 
   // 2. UPDATED BUTTON HANDLER (With Confirm)
   const handleLoadClick = (project: Project) => {
-    if (confirm(`Load project "${project.title}"? Unsaved changes will be lost.`)) {
+    if (confirm(`Load project "${project.title}" ? Unsaved changes will be lost.`)) {
       loadProjectState(project)
     }
   }
@@ -381,16 +384,26 @@ function App() {
           </select>
         </div>
 
-        {/* Mode Toggle Button */}
-        <button
-          onClick={toggleMode}
-          className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${mode === 'RECORD'
-            ? 'bg-red-500 hover:bg-red-600 text-white'
-            : 'bg-emerald-500 hover:bg-emerald-600 text-white'
-            }`}
-        >
-          {mode === 'RECORD' ? '🔴 RECORD Mode' : '▶️ PLAYBACK Mode'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Mode Toggle Button */}
+          <button
+            onClick={toggleMode}
+            className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${mode === 'RECORD'
+              ? 'bg-red-500 hover:bg-red-600 text-white'
+              : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+              }`}
+          >
+            {mode === 'RECORD' ? '🔴 RECORD Mode' : '▶️ PLAYBACK Mode'}
+          </button>
+
+          {/* View Mode Toggle */}
+          <button
+            onClick={() => setViewMode(prev => prev === 'PAGE' ? 'SCROLL' : 'PAGE')}
+            className="px-3 py-2 rounded bg-slate-700 text-white text-sm font-semibold border border-slate-600 hover:bg-slate-600 transition-colors"
+          >
+            {viewMode === 'PAGE' ? '📄 Page View' : '∞ Scroll View'}
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -400,12 +413,21 @@ function App() {
           id="score-container"
           className="flex-grow bg-gray-100 overflow-auto relative"
         >
-          <ScoreViewer
-            audioRef={audioRef}
-            anchors={anchors}
-            mode={mode}
-            musicXmlUrl={xmlUrl}
-          />
+          {viewMode === 'PAGE' ? (
+            <ScoreViewer
+              audioRef={audioRef}
+              anchors={anchors}
+              mode={mode}
+              musicXmlUrl={xmlUrl}
+            />
+          ) : (
+            <ScoreViewerScroll
+              audioRef={audioRef}
+              anchors={anchors}
+              mode={mode}
+              musicXmlUrl={xmlUrl}
+            />
+          )}
         </main>
 
         {/* Right Sidebar - Sync Anchors */}

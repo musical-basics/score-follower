@@ -229,6 +229,16 @@ function App() {
     // Optionally reset when audio ends
   }, [])
 
+  const togglePlayPause = useCallback(() => {
+    if (audioRef.current) {
+      if (audioRef.current.paused) {
+        audioRef.current.play()
+      } else {
+        audioRef.current.pause()
+      }
+    }
+  }, [])
+
   // Auto-scroll to newest anchor
   useEffect(() => {
     if (anchorListRef.current && anchors.length > 0) {
@@ -236,21 +246,30 @@ function App() {
     }
   }, [anchors])
 
-  // Handle spacebar press
+  // Handle global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if typing in an input
+      // 1. Ignore shortcuts if user is typing in an Input field
       if (event.target instanceof HTMLInputElement) return
 
-      if (event.code === 'Space' && event.target === document.body) {
-        event.preventDefault() // Prevent scrolling
-        handleTap()
+      // 2. SPACEBAR -> Play/Pause
+      if (event.code === 'Space') {
+        event.preventDefault() // Prevent page scrolling
+        togglePlayPause()
+      }
+
+      // 3. "A" KEY -> Add Anchor (Tap)
+      else if (event.code === 'KeyA') {
+        // Only prevent default if we actually handled it
+        if (mode === 'RECORD') {
+          handleTap()
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleTap])
+  }, [handleTap, togglePlayPause, mode])
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -491,7 +510,7 @@ function App() {
             : 'bg-slate-800 text-slate-600 cursor-not-allowed border-slate-800'
             }`}
         >
-          TAP
+          TAP (Press "A")
         </button>
       </footer>
     </div>

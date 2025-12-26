@@ -36,7 +36,27 @@ function App() {
 
   // Load projects on mount
   useEffect(() => {
-    projectService.getProjects().then(setProjects).catch(console.error)
+    const init = async () => {
+      // 1. Load the list of projects (existing logic)
+      try {
+        const list = await projectService.getProjects()
+        setProjects(list)
+
+        // 2. Check if we have a "Last Project" saved
+        const lastId = localStorage.getItem('lastProjectId')
+        if (lastId) {
+          console.log('Restoring last session:', lastId)
+          const lastProject = await projectService.getProjectById(lastId)
+          if (lastProject) {
+            loadProjectState(lastProject)
+          }
+        }
+      } catch (err) {
+        console.error('Initialization failed:', err)
+      }
+    }
+
+    init()
   }, [])
 
   // Handle File Selections
@@ -105,6 +125,7 @@ function App() {
       // Switch context to this new project
       setCurrentProjectId(newProject.id)
       setCurrentProjectTitle(newProject.title)
+      localStorage.setItem('lastProjectId', newProject.id)
     } catch (err) {
       console.error(err)
       alert('Failed to create new project. Check console.')
@@ -129,26 +150,34 @@ function App() {
     }
   }
 
-  // Load Project
-  const handleLoad = (project: Project) => {
+  // 1. EXTRACTED LOADING LOGIC (No Confirm)
+  const loadProjectState = useCallback((project: Project) => {
+    // Clear file inputs as we are using URLs now
+    setAudioFile(null)
+    setXmlFile(null)
+
+    setAudioUrl(project.audio_url)
+    setXmlUrl(project.xml_url)
+    setAnchors(project.anchors)
+    setCurrentProjectId(project.id) // Track the ID
+    setCurrentProjectTitle(project.title)
+
+    // Reset to Loaded/Record state
+    setMode('RECORD')
+
+    // Reset audio position
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0
+    }
+
+    // PERSIST: Save ID to local storage so we remember next time
+    localStorage.setItem('lastProjectId', project.id)
+  }, [])
+
+  // 2. UPDATED BUTTON HANDLER (With Confirm)
+  const handleLoadClick = (project: Project) => {
     if (confirm(`Load project "${project.title}"? Unsaved changes will be lost.`)) {
-      setAudioFile(null) // Clear file inputs as we are using URLs now
-      setXmlFile(null)
-
-      setAudioUrl(project.audio_url)
-      setXmlUrl(project.xml_url)
-      setAnchors(project.anchors)
-      setCurrentProjectId(project.id) // Track the ID
-      setCurrentProjectTitle(project.title)
-
-      // Reset to Loaded/Record state
-      setMode('RECORD')
-      // handleReset() removed because it wipes the anchors we just loaded!
-
-      // We should probably seek audio to 0
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0
-      }
+      loadProjectState(project)
     }
   }
 
@@ -313,7 +342,7 @@ function App() {
             className="bg-slate-700 text-white px-3 py-1 rounded text-sm border border-slate-600 focus:outline-none focus:border-blue-500"
             onChange={(e) => {
               const proj = projects.find(p => p.id === e.target.value)
-              if (proj) handleLoad(proj)
+              if (proj) handleLoadClick(proj)
               e.target.value = "" // Reset selection
             }}
           >

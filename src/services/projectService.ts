@@ -112,5 +112,20 @@ export const projectService = {
 
         if (error) throw error
         return data || []
+    },
+
+    // Fetch a single project by ID
+    async getProjectById(id: string): Promise<Project | null> {
+        const { data, error } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('id', id)
+            .single()
+
+        if (error) {
+            console.warn('Could not fetch project:', error)
+            return null
+        }
+        return data
     }
 }

@@ -25,6 +25,7 @@ export function ScoreViewer({ audioRef, anchors, mode, musicXmlUrl }: ScoreViewe
     const containerRef = useRef<HTMLDivElement>(null)
     const cursorRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null) // 1. NEW: Add a Ref for the outer scrollable wrapper
+    const lastMeasureIndexRef = useRef<number>(0) // Track backward jumps
     const osmdRef = useRef<OSMD | null>(null)
     const [isLoaded, setIsLoaded] = useState(false)
     const animationFrameRef = useRef<number | null>(null)
@@ -311,22 +312,27 @@ export function ScoreViewer({ audioRef, anchors, mode, musicXmlUrl }: ScoreViewe
             // 2. NEW: Auto-Scroll Logic ("Page Turn" Style)
             if (scrollContainerRef.current) {
                 const container = scrollContainerRef.current
-
-                // Define the "viewable area"
                 const containerTop = container.scrollTop
                 const containerBottom = container.scrollTop + container.clientHeight
                 const cursorBottom = systemTop + systemHeight
 
-                // Check if cursor is below the fold (scrolling down)
-                if (cursorBottom > containerBottom) {
-                    // Scroll so the current system aligns to the top (with 20px padding)
-                    container.scrollTo({ top: systemTop - 20, behavior: 'smooth' })
-                }
-                // Check if cursor is above the fold (scrolling up/backwards)
-                else if (systemTop < containerTop) {
-                    container.scrollTo({ top: systemTop - 20, behavior: 'smooth' })
+                // CRITICAL FIX: Only auto-scroll if the measure actually CHANGED.
+                // This stops the app from fighting your manual scrolling 60 times a second.
+                if (currentMeasureIndex !== lastMeasureIndexRef.current) {
+
+                    // Case A: Cursor moved forward into a hidden area below (Page Turn)
+                    if (cursorBottom > containerBottom) {
+                        container.scrollTo({ top: systemTop - 20, behavior: 'smooth' })
+                    }
+                    // Case B: Cursor moved backward into a hidden area above (Loop/Jump)
+                    else if (systemTop < containerTop) {
+                        container.scrollTo({ top: systemTop - 20, behavior: 'smooth' })
+                    }
                 }
             }
+
+            // Update history for next frame
+            lastMeasureIndexRef.current = currentMeasureIndex
 
             // === KARAOKE HIGHLIGHTING (Master Time Grid) ===
             // 1. Get notes for the current measure

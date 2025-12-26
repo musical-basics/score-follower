@@ -405,15 +405,88 @@ export function ScoreViewer({ audioRef, anchors, mode, musicXmlUrl }: ScoreViewe
         }
     }, [isLoaded, updateCursorPosition, audioRef])
 
+    // CLICK HANDLER: Translate XY click to Measure -> Time -> Seek
+    const handleScoreClick = useCallback((event: React.MouseEvent) => {
+        const osmd = osmdRef.current
+        if (!osmd || !osmd.GraphicSheet || !containerRef.current) return
+
+        // 1. Get click coordinates relative to the internal OSMD container
+        const rect = containerRef.current.getBoundingClientRect()
+        const clickX = event.clientX - rect.left
+        const clickY = event.clientY - rect.top
+
+        // 2. Loop through measures to find the one we clicked
+        const measureList = osmd.GraphicSheet.MeasureList
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const unitInPixels = (osmd.GraphicSheet as any).UnitInPixels || 10
+
+        let clickedMeasureIndex = -1
+
+        for (let i = 0; i < measureList.length; i++) {
+            const measureStaves = measureList[i]
+            if (!measureStaves) continue
+
+            // Calculate Bounding Box for this measure (Reuse logic from updateCursorPosition)
+            let minY = Number.MAX_VALUE
+            let maxY = Number.MIN_VALUE
+            let minX = Number.MAX_VALUE
+            let maxX = Number.MIN_VALUE
+
+            measureStaves.forEach(staffMeasure => {
+                const pos = staffMeasure.PositionAndShape
+                if (!pos) return
+                const absY = pos.AbsolutePosition.y
+                const absX = pos.AbsolutePosition.x
+
+                if (absY + pos.BorderTop < minY) minY = absY + pos.BorderTop
+                if (absY + pos.BorderBottom > maxY) maxY = absY + pos.BorderBottom
+                if (absX + pos.BorderLeft < minX) minX = absX + pos.BorderLeft
+                if (absX + pos.BorderRight > maxX) maxX = absX + pos.BorderRight
+            })
+
+            // Convert to Pixels for hit testing
+            const boxTop = minY * unitInPixels
+            const boxBottom = maxY * unitInPixels
+            const boxLeft = minX * unitInPixels
+            const boxRight = maxX * unitInPixels
+
+            // Check if click is inside this box
+            if (clickX >= boxLeft && clickX <= boxRight && clickY >= boxTop && clickY <= boxBottom) {
+                clickedMeasureIndex = i
+                break // Found it!
+            }
+        }
+
+        if (clickedMeasureIndex !== -1) {
+            const measureNumber = clickedMeasureIndex + 1
+            console.log(`Clicked Measure: ${measureNumber}`)
+
+            // 3. Find the anchor for this measure
+            // Strategy: Find exact match, or fallback to the closest PREVIOUS anchor
+            // This ensures if you click M12 but only anchored M10, it plays from M10.
+            const sortedAnchors = [...anchors].sort((a, b) => a.measure - b.measure)
+
+            // Find the closest anchor that is <= the clicked measure
+            const targetAnchor = sortedAnchors.reverse().find(a => a.measure <= measureNumber)
+
+            if (targetAnchor && audioRef.current) {
+                audioRef.current.currentTime = targetAnchor.time
+                // Optional: If you want it to auto-play on click
+                // if (audioRef.current.paused) audioRef.current.play()
+            }
+        }
+    }, [anchors, audioRef]) // eslint-disable-line
+
     return (
         <div
             ref={scrollContainerRef}
             className="relative w-full h-full overflow-auto bg-white"
         >
-            {/* OSMD Container */}
+            {/* OSMD Container - NOW CLICKABLE */}
             <div
                 ref={containerRef}
-                className="w-full min-h-[400px]"
+                onClick={handleScoreClick} // <--- Attach handler here
+                className="w-full min-h-[400px] cursor-pointer" // <--- Add pointer cursor
             />
 
             {/* Custom Cursor Overlay */}

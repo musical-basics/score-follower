@@ -31,8 +31,24 @@ function App() {
   const [audioUrl, setAudioUrl] = useState<string>(DEFAULT_AUDIO)
   const [xmlUrl, setXmlUrl] = useState<string | undefined>(undefined) // undefined uses default inside Viewer
 
+  const [currentMeasure, setCurrentMeasure] = useState<number>(1)
+
   const audioRef = useRef<HTMLAudioElement>(null)
   const anchorListRef = useRef<HTMLDivElement>(null)
+  // Ref for the specific DOM element of the active row (to scroll to it)
+  const activeRowRef = useRef<HTMLDivElement>(null)
+
+  // Helper: Find measure based on time (for Sidebar highlighting)
+  const getCurrentMeasure = useCallback((time: number) => {
+    if (anchors.length === 0) return 1
+
+    // Sort anchors just in case
+    const sorted = [...anchors].sort((a, b) => a.time - b.time)
+
+    // Find the last anchor that is <= current time
+    const anchor = sorted.reverse().find(a => a.time <= time)
+    return anchor ? anchor.measure : 1
+  }, [anchors])
 
   // Load projects on mount
   useEffect(() => {
@@ -268,6 +284,16 @@ function App() {
     }
   }, [])
 
+  // Auto-scroll Sidebar to follow music
+  useEffect(() => {
+    if (activeRowRef.current) {
+      activeRowRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest', // Only scroll if out of view (or close to edge)
+      })
+    }
+  }, [currentMeasure])
+
   // Auto-scroll to newest anchor
   useEffect(() => {
     if (anchorListRef.current && anchors.length > 0) {
@@ -439,14 +465,27 @@ function App() {
                   const anchor = anchors.find(a => a.measure === m)
                   const isMeasureOne = m === 1
 
+                  const isActive = m === currentMeasure
+
                   if (anchor) {
                     rows.push(
                       <div
                         key={m}
+                        // NEW: Attach ref only if this is the active row
+                        ref={isActive ? activeRowRef : null}
                         onClick={() => handleJumpToMeasure(anchor.time)}
-                        className="cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all border rounded-md px-3 py-2 text-sm flex items-center justify-between bg-white border-gray-200"
+                        // NEW: Dynamic Styling for Active State (Orange)
+                        className={`
+                          cursor-pointer px-3 py-2 text-sm flex items-center justify-between border rounded-md transition-all duration-200
+                          ${isActive
+                            ? 'bg-orange-50 border-orange-300 shadow-sm ring-1 ring-orange-200'
+                            : 'bg-white border-gray-200 hover:bg-blue-50 hover:border-blue-300'
+                          }
+                        `}
                       >
-                        <span className="font-medium text-gray-600">Measure {m}:</span>
+                        <span className={`font-medium ${isActive ? 'text-orange-700 font-bold' : 'text-gray-600'}`}>
+                          Measure {m}:
+                        </span>
 
                         <div className="flex items-center gap-2">
                           {/* Time Display/Input */}
@@ -480,8 +519,21 @@ function App() {
                   } else {
                     // === RENDER "GHOST" ROW (Missing Anchor) ===
                     rows.push(
-                      <div key={m} className="border border-dashed border-red-300 bg-red-50 rounded-md px-3 py-2 text-sm flex items-center justify-between">
-                        <span className="font-medium text-red-400">Measure {m}</span>
+                      <div
+                        key={m}
+                        // Optional: Highlight ghost rows too if you traverse them?
+                        ref={isActive ? activeRowRef : null}
+                        className={`
+                           border border-dashed rounded-md px-3 py-2 text-sm flex items-center justify-between transition-colors
+                           ${isActive
+                            ? 'bg-orange-50 border-orange-300' // Active Ghost
+                            : 'bg-red-50 border-red-300'       // Inactive Ghost
+                          }
+                         `}
+                      >
+                        <span className={`font-medium ${isActive ? 'text-red-500 font-bold' : 'text-red-400'}`}>
+                          Measure {m}
+                        </span>
 
                         {mode === 'RECORD' ? (
                           <button
@@ -514,6 +566,13 @@ function App() {
           src={audioUrl}
           onSeeked={handleSeeked}
           onEnded={handleEnded}
+          // NEW: Update sidebar highlighting 60fps-ish (or however fast audio updates)
+          onTimeUpdate={() => {
+            if (audioRef.current) {
+              const m = getCurrentMeasure(audioRef.current.currentTime)
+              if (m !== currentMeasure) setCurrentMeasure(m)
+            }
+          }}
         >
           Your browser does not support the audio element.
         </audio>

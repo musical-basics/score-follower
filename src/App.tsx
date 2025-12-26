@@ -118,6 +118,33 @@ function App() {
     }
   }
 
+  // Add this helper to insert/update an anchor while keeping the array sorted
+  const upsertAnchor = (measure: number, time: number) => {
+    setAnchors(prev => {
+      // Remove existing anchor for this measure if it exists
+      const filtered = prev.filter(a => a.measure !== measure)
+      // Add the new one
+      const newAnchors = [...filtered, { measure, time }]
+      // Sort by measure number to keep the list clean
+      return newAnchors.sort((a, b) => a.measure - b.measure)
+    })
+  }
+
+  // The Delete Handler
+  const handleDelete = (measureToDelete: number) => {
+    if (measureToDelete === 1) {
+      alert("Cannot delete the start of the song (Measure 1).")
+      return
+    }
+    setAnchors(prev => prev.filter(a => a.measure !== measureToDelete))
+  }
+
+  // The "Restamp" Handler (for the ghost row)
+  const handleRestamp = (measureToStamp: number) => {
+    if (!audioRef.current) return
+    upsertAnchor(measureToStamp, audioRef.current.currentTime)
+  }
+
   const handleTap = useCallback(() => {
     // Only allow tapping in RECORD mode
     if (mode !== 'RECORD') return
@@ -134,15 +161,7 @@ function App() {
     setAnchors(INITIAL_ANCHORS)
   }, [])
 
-  // Update a specific anchor's time (except Measure 1 which must stay at 0)
-  const handleAnchorUpdate = useCallback((index: number, newTime: number) => {
-    // Prevent editing Measure 1 (index 0) or editing in PLAYBACK mode
-    if (index === 0 || mode !== 'RECORD') return
 
-    setAnchors(prev => prev.map((anchor, i) =>
-      i === index ? { ...anchor, time: newTime } : anchor
-    ))
-  }, [mode])
 
   // Toggle between RECORD and PLAYBACK modes
   const toggleMode = useCallback(() => {
@@ -300,44 +319,71 @@ function App() {
               ref={anchorListRef}
               className="flex-1 overflow-y-auto p-4 space-y-2"
             >
-              {anchors.map((anchor, index) => {
-                const isMeasureOne = index === 0
-                const isEditable = !isMeasureOne && mode === 'RECORD'
-                return (
-                  <div
-                    key={index}
-                    className={`border rounded-md px-3 py-2 text-sm flex items-center justify-between transition-colors ${isMeasureOne
-                      ? 'bg-gray-100 border-gray-300 text-gray-500'
-                      : 'bg-white border-gray-200 text-gray-700 hover:border-indigo-300'
-                      }`}
-                  >
-                    <span className="font-medium text-gray-600">Measure {anchor.measure}:</span>
-                    <div className="flex items-center gap-1">
-                      {!isEditable ? (
-                        // Locked display
-                        <span className="w-20 px-2 py-1 text-right font-mono text-gray-500 bg-gray-50 rounded">
-                          {anchor.time.toFixed(2)}
-                        </span>
-                      ) : (
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={anchor.time.toFixed(2)}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value)
-                            if (!isNaN(val) && val >= 0) {
-                              handleAnchorUpdate(index, val)
-                            }
-                          }}
-                          className="w-20 px-2 py-1 text-right font-mono text-indigo-700 bg-white border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                        />
-                      )}
-                      <span className="text-gray-400 text-xs">s</span>
-                    </div>
-                  </div>
-                )
-              })}
+              {(() => {
+                if (anchors.length === 0) return null
+
+                // Find the highest measure number we know about
+                const maxMeasure = Math.max(...anchors.map(a => a.measure))
+                const rows = []
+
+                // Loop through 1 to MaxMeasure
+                for (let m = 1; m <= maxMeasure; m++) {
+                  const anchor = anchors.find(a => a.measure === m)
+                  const isMeasureOne = m === 1
+
+                  if (anchor) {
+                    // === RENDER EXISTING ANCHOR ===
+                    rows.push(
+                      <div key={m} className="border rounded-md px-3 py-2 text-sm flex items-center justify-between bg-white border-gray-200">
+                        <span className="font-medium text-gray-600">Measure {m}:</span>
+
+                        <div className="flex items-center gap-2">
+                          {/* Time Display/Input */}
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={anchor.time.toFixed(2)}
+                            onChange={(e) => upsertAnchor(m, parseFloat(e.target.value))}
+                            disabled={mode !== 'RECORD' || isMeasureOne}
+                            className="w-16 text-right font-mono border rounded px-1"
+                          />
+                          <span className="text-gray-400 text-xs">s</span>
+
+                          {/* Delete Button (X) */}
+                          {!isMeasureOne && mode === 'RECORD' && (
+                            <button
+                              onClick={() => handleDelete(m)}
+                              className="ml-2 text-gray-400 hover:text-red-500 font-bold px-2"
+                              title="Un-sync this measure"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  } else {
+                    // === RENDER "GHOST" ROW (Missing Anchor) ===
+                    rows.push(
+                      <div key={m} className="border border-dashed border-red-300 bg-red-50 rounded-md px-3 py-2 text-sm flex items-center justify-between">
+                        <span className="font-medium text-red-400">Measure {m}</span>
+
+                        {mode === 'RECORD' ? (
+                          <button
+                            onClick={() => handleRestamp(m)}
+                            className="text-xs bg-red-100 text-red-600 border border-red-200 px-2 py-1 rounded hover:bg-red-200 transition-colors"
+                          >
+                            📍 Set to Current Time
+                          </button>
+                        ) : (
+                          <span className="text-xs text-red-300 italic">Not Synced</span>
+                        )}
+                      </div>
+                    )
+                  }
+                }
+                return rows
+              })()}
             </div>
           </div>
         </aside>

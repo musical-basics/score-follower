@@ -49,54 +49,57 @@ export function ScoreViewer({ audioRef, anchors, mode, musicXmlUrl }: ScoreViewe
             const measureNotes: NoteData[] = []
 
             if (!measureStaves || measureStaves.length === 0) return
-            const staffMeasure = measureStaves[0]
-            if (!staffMeasure) return
 
-            const measurePos = staffMeasure.PositionAndShape
-            const measureWidth = (measurePos.BorderRight - measurePos.BorderLeft) * unitInPixels
+            // Iterate through ALL staves (Treble, Bass, Drums, etc.)
+            measureStaves.forEach(staffMeasure => {
+                if (!staffMeasure) return
 
-            // Iterate through all staff entries (notes/chords)
-            staffMeasure.staffEntries.forEach(entry => {
-                const graphicalVoiceEntries = entry.graphicalVoiceEntries
-                if (!graphicalVoiceEntries) return
+                const measurePos = staffMeasure.PositionAndShape
+                const measureWidth = (measurePos.BorderRight - measurePos.BorderLeft) * unitInPixels
 
-                // Calculate relative x position in measure (0.0 to 1.0)
-                // Entry RelativePosition is relative to the measure's AbsolutePosition
-                const relX = entry.PositionAndShape.RelativePosition.x * unitInPixels
-                const relativeTimestamp = relX / measureWidth
+                // Iterate through all staff entries (notes/chords)
+                staffMeasure.staffEntries.forEach(entry => {
+                    const graphicalVoiceEntries = entry.graphicalVoiceEntries
+                    if (!graphicalVoiceEntries) return
 
-                graphicalVoiceEntries.forEach(gve => {
-                    if (!gve.notes) return
+                    // Calculate relative x position in measure (0.0 to 1.0)
+                    // Entry RelativePosition is relative to the measure's AbsolutePosition
+                    const relX = entry.PositionAndShape.RelativePosition.x * unitInPixels
+                    const relativeTimestamp = relX / measureWidth
 
-                    gve.notes.forEach(note => {
-                        // Access internal VexFlow note to get ID
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        const internalNote = note as any
-                        if (internalNote.vfnote && internalNote.vfnote.length > 0) {
-                            const vfStaveNote = internalNote.vfnote[0]
-                            const vfId = vfStaveNote.attrs ? vfStaveNote.attrs.id : null
+                    graphicalVoiceEntries.forEach(gve => {
+                        if (!gve.notes) return
 
-                            if (vfId) {
-                                // Try to find the element in DOM
-                                // Check both raw ID and vf- prefixed ID
-                                let element = document.getElementById(vfId)
-                                if (!element) {
-                                    element = document.getElementById(`vf-${vfId}`)
-                                }
+                        gve.notes.forEach(note => {
+                            // Access internal VexFlow note to get ID
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            const internalNote = note as any
+                            if (internalNote.vfnote && internalNote.vfnote.length > 0) {
+                                const vfStaveNote = internalNote.vfnote[0]
+                                const vfId = vfStaveNote.attrs ? vfStaveNote.attrs.id : null
 
-                                if (element) {
-                                    measureNotes.push({
-                                        id: vfId,
-                                        measureIndex: measureNumber,
-                                        timestamp: relativeTimestamp,
-                                        element: element
-                                    })
-                                } else {
-                                    // Warn only if we expected to find it (sanity check)
-                                    // console.warn(`[ScoreViewer] Could not find DOM element for note ${vfId}`)
+                                if (vfId) {
+                                    // Try to find the element in DOM
+                                    // Check both raw ID and vf- prefixed ID
+                                    let element = document.getElementById(vfId)
+                                    if (!element) {
+                                        element = document.getElementById(`vf-${vfId}`)
+                                    }
+
+                                    if (element) {
+                                        measureNotes.push({
+                                            id: vfId,
+                                            measureIndex: measureNumber,
+                                            timestamp: relativeTimestamp,
+                                            element: element
+                                        })
+                                    } else {
+                                        // Warn only if we expected to find it (sanity check)
+                                        // console.warn(`[ScoreViewer] Could not find DOM element for note ${vfId}`)
+                                    }
                                 }
                             }
-                        }
+                        })
                     })
                 })
             })
@@ -247,28 +250,52 @@ export function ScoreViewer({ audioRef, anchors, mode, musicXmlUrl }: ScoreViewe
             const measureStaves = measureList[currentMeasureIndex]
             if (!measureStaves || measureStaves.length === 0) return
 
-            const staffMeasure = measureStaves[0]
-            if (!staffMeasure) return
-
-            const positionAndShape = staffMeasure.PositionAndShape
-            if (!positionAndShape) return
-
-            // Use OSMD's actual unit scaling (handles zoom/scaling correctly)
+            // --- NEW LOGIC: Calculate bounds across ALL staves in the system ---
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const unitInPixels = (osmd.GraphicSheet as any).UnitInPixels || 10
 
-            const absoluteX = positionAndShape.AbsolutePosition.x * unitInPixels
-            const absoluteY = positionAndShape.AbsolutePosition.y * unitInPixels
-            const width = (positionAndShape.BorderRight - positionAndShape.BorderLeft) * unitInPixels
-            const height = (positionAndShape.BorderBottom - positionAndShape.BorderTop) * unitInPixels
+            let minY = Number.MAX_VALUE
+            let maxY = Number.MIN_VALUE
+            let minX = Number.MAX_VALUE
+            let maxX = Number.MIN_VALUE
 
-            // Apply interpolation for smooth movement within the measure
-            const cursorX = absoluteX + (width * effectiveProgress)
+            // Loop through every instrument/stave in this vertical slice
+            measureStaves.forEach(staffMeasure => {
+                const pos = staffMeasure.PositionAndShape
+                if (!pos) return
 
-            // Update the cursor div
+                const absoluteY = pos.AbsolutePosition.y
+                const absoluteX = pos.AbsolutePosition.x
+
+                // Calculate top and bottom of this specific stave
+                const top = absoluteY + pos.BorderTop
+                const bottom = absoluteY + pos.BorderBottom
+
+                // Expand our global bounding box
+                if (top < minY) minY = top
+                if (bottom > maxY) maxY = bottom
+
+                // We also need the X positions (they should be roughly aligned, but good to be safe)
+                const left = absoluteX + pos.BorderLeft
+                const right = absoluteX + pos.BorderRight
+
+                if (left < minX) minX = left
+                if (right > maxX) maxX = right
+            })
+
+            // Convert to pixels
+            const systemTop = minY * unitInPixels
+            const systemHeight = (maxY - minY) * unitInPixels
+            const systemX = minX * unitInPixels
+            const systemWidth = (maxX - minX) * unitInPixels
+
+            // Apply interpolation
+            const cursorX = systemX + (systemWidth * effectiveProgress)
+
+            // Update Cursor Style
             cursorRef.current.style.left = `${cursorX}px`
-            cursorRef.current.style.top = `${absoluteY}px`
-            cursorRef.current.style.height = `${Math.max(height, 80)}px`
+            cursorRef.current.style.top = `${systemTop}px`
+            cursorRef.current.style.height = `${systemHeight}px`
             cursorRef.current.style.display = 'block'
 
             // Update cursor color based on mode

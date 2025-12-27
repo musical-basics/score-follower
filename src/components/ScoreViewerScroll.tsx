@@ -266,8 +266,8 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
 
     // === DARK MODE EFFECT ===
     useEffect(() => {
-        const baseColor = darkMode ? '#ffffff' : '#000000'
-        const bgColor = darkMode ? '#1a1a1a' : '#ffffff'
+        const baseColor = darkMode ? '#e0e0e0' : '#000000'
+        const bgColor = darkMode ? '#222222' : '#ffffff'
 
         // 1. Color All Content Elements
         if (measureContentMap.current) {
@@ -284,6 +284,11 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
         // 3. Color Container Background
         if (scrollContainerRef.current) {
             scrollContainerRef.current.style.backgroundColor = bgColor
+        }
+
+        // 4. Update Curtain Color (if active)
+        if (curtainRef.current) {
+            curtainRef.current.style.backgroundColor = bgColor
         }
     }, [darkMode, isLoaded])
 
@@ -372,7 +377,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
             if (curtainRef.current) {
                 if (revealMode === 'CURTAIN') {
                     curtainRef.current.style.display = 'block'
-                    curtainRef.current.style.backgroundColor = darkMode ? '#1a1a1a' : '#ffffff'
+                    curtainRef.current.style.backgroundColor = darkMode ? '#222222' : '#ffffff'
 
                     const curtainLookahead = 180
                     curtainRef.current.style.left = `${cursorX + curtainLookahead}px`
@@ -433,7 +438,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                 const scaleRatio = fullMeasureWidth > 0 ? activeWidth / fullMeasureWidth : 1
                 const highlightProgress = offsetRatio + (effectiveProgress * scaleRatio)
 
-                const defaultColor = darkMode ? '#ffffff' : '#000000'
+                const defaultColor = darkMode ? '#e0e0e0' : '#000000'
 
                 notesInMeasure.forEach(noteData => {
                     if (!noteData.element) return
@@ -443,6 +448,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                     // Color & Scale Logic
                     if (highlightProgress <= noteEndThreshold && highlightProgress >= noteData.timestamp - lookahead) {
                         applyColor(noteData.element, '#10B981')
+                        if (noteData.stemElement) applyColor(noteData.stemElement, '#10B981')
 
                         // === POP EFFECT LOGIC ===
                         if (popEffect) {
@@ -451,8 +457,9 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
 
                     } else {
                         applyColor(noteData.element, defaultColor)
+                        if (noteData.stemElement) applyColor(noteData.stemElement, defaultColor)
 
-                        // Reset Size
+                        // Reset Size (Force un-pop)
                         if (popEffect) {
                             noteData.element.style.transform = 'scale(1)'
                         }
@@ -462,7 +469,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
 
             // Record Mode Reset
             if (mode === 'RECORD' && notesInMeasure) {
-                const defaultColor = darkMode ? '#ffffff' : '#000000'
+                const defaultColor = darkMode ? '#e0e0e0' : '#000000'
                 notesInMeasure.forEach(noteData => {
                     if (noteData.element) {
                         applyColor(noteData.element, defaultColor)

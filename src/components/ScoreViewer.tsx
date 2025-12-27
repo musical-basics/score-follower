@@ -342,19 +342,8 @@ export function ScoreViewer({ audioRef, anchors, mode, musicXmlUrl }: ScoreViewe
                 notesInMeasure.forEach(noteData => {
                     if (!noteData.element) return
 
-                    const lookahead = 0.15 // 15% of measure width
-
-                    // Highlight if we are approaching the note or currently on it
-                    // But reset if we have passed it (progress > noteData.timestamp)
-                    // Wait, previous logic was: "increase noteWidthBuffer... keeps it green until cursor clears it"
-                    // "clearing it" means progress > timestamp.
-
-                    // Refined Logic based on "Approaching -> On It -> Passed":
-                    // Start highlighting when within 'lookahead' distance
-                    // Stop highlighting when 'passed' by some small amount (to account for note width)
-                    // Note width is small, maybe 0.02 of measure?
-
-                    const noteEndThreshold = noteData.timestamp + 0.03
+                    const lookahead = 0.04
+                    const noteEndThreshold = noteData.timestamp + 0.01
 
                     if (effectiveProgress <= noteEndThreshold && effectiveProgress >= noteData.timestamp - lookahead) {
                         applyColor(noteData.element, '#10B981')

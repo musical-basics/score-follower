@@ -271,15 +271,29 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl }: Scor
             if (scrollContainerRef.current) {
                 const container = scrollContainerRef.current
                 const containerWidth = container.clientWidth
+                const currentScroll = container.scrollLeft
+                const cursorScreenX = cursorX - currentScroll
 
-                // Position the cursor at 30% of the screen width (optimal for reading ahead)
-                // "cursorX" is the pixel position of the cursor in the infinite sheet
-                const targetScrollLeft = cursorX - (containerWidth * 0.3)
+                // 1. Measure Change Check (The "Page Turn")
+                // We ONLY scroll when the measure actually changes.
+                // This prevents the "fighting" sensation while scrolling within a measure.
+                if (currentMeasureIndex !== lastMeasureIndexRef.current) {
 
-                // Direct DOM assignment is better for continuous tracking than scrollTo()
-                // We don't check for "backward jump" here because in Horizontal Mode,
-                // we ALWAYS want to track the cursor. It's a "Camera Follow" mode.
-                container.scrollLeft = targetScrollLeft
+                    // 2. "Smart Snap": Only snap if the cursor is actually visible or close.
+                    // If you scrolled WAY back to Measure 1 (while music is at M50), 
+                    // we assume you want to stay there, so we DON'T snap.
+                    // "Close" = within 2 screen widths.
+                    const isReadingHistory = cursorScreenX > (containerWidth * 2)
+
+                    if (!isReadingHistory) {
+                        // Snap the cursor to the 20% mark (left-ish side of screen)
+                        // so you have plenty of space to read ahead.
+                        container.scrollTo({
+                            left: cursorX - (containerWidth * 0.2),
+                            behavior: 'smooth'
+                        })
+                    }
+                }
             }
 
             lastMeasureIndexRef.current = currentMeasureIndex
@@ -290,8 +304,8 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl }: Scor
             if (notesInMeasure && mode === 'PLAYBACK') {
                 notesInMeasure.forEach(noteData => {
                     if (!noteData.element) return
-                    const lookahead = 0.15
-                    const noteEndThreshold = noteData.timestamp + 0.03
+                    const lookahead = 0.04
+                    const noteEndThreshold = noteData.timestamp + 0.01
 
                     if (effectiveProgress <= noteEndThreshold && effectiveProgress >= noteData.timestamp - lookahead) {
                         applyColor(noteData.element, '#10B981')

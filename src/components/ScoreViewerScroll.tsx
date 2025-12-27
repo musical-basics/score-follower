@@ -20,7 +20,7 @@ type NoteData = {
     measureIndex: number
     timestamp: number
     element: HTMLElement | null
-    stemElement: HTMLElement | null // NEW: Track the stem separately
+    stemElement: HTMLElement | null
 }
 
 export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, revealMode }: ScoreViewerProps) {
@@ -102,7 +102,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                                             measureIndex: measureNumber,
                                             timestamp: relativeTimestamp,
                                             element: group as HTMLElement,
-                                            stemElement: null // Will fill this next
+                                            stemElement: null // Will fill next
                                         })
                                     }
                                 }
@@ -114,24 +114,21 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
             if (measureNotes.length > 0) newNoteMap.set(measureNumber, measureNotes)
         })
 
-        // C. STEM SCANNER (New Fix)
-        // Find all stems and link them to the nearest note
+        // C. STEM SCANNER
+        // Link stems to notes (Spatial Association)
         const allStems = Array.from(containerRef.current.querySelectorAll('.vf-stem'))
         allStems.forEach(stem => {
             const stemRect = stem.getBoundingClientRect()
             const stemX = stemRect.left + (stemRect.width / 2)
 
-            // Find the closest note to this stem
             let closestNote: NoteData | null = null
-            let minDist = 10 // Threshold pixels
-
+            let minDist = 15 // Pixels
             newNoteMap.forEach(notes => {
                 notes.forEach(note => {
                     if (note.element) {
                         const noteRect = note.element.getBoundingClientRect()
                         const noteX = noteRect.left + (noteRect.width / 2)
                         const dist = Math.abs(stemX - noteX)
-                        // Stems should be very close horizontally to their notehead
                         if (dist < minDist) {
                             minDist = dist
                             closestNote = note
@@ -139,24 +136,28 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                     }
                 })
             })
-
-            if (closestNote) {
-                // Link them!
-                (closestNote as NoteData).stemElement = stem as HTMLElement
-            }
+            if (closestNote) (closestNote as NoteData).stemElement = stem as HTMLElement
         })
 
-        // D. Content Map (Visibility)
-        const selector = '.vf-stavenote, .vf-beam, .vf-rest, .vf-accidental, .vf-modifier, .vf-stem'
-        const allElements = Array.from(containerRef.current.querySelectorAll(selector))
+        // D. UNIVERSAL CONTENT MAP (Visibility)
+        // Select ALL relevant SVG elements to catch ledger lines, accidentals, text, etc.
+        const allElements = Array.from(containerRef.current.querySelectorAll('svg path, svg rect, svg text, .vf-stavenote, .vf-beam'))
+
         allElements.forEach(el => {
-            const rect = el.getBoundingClientRect()
+            const element = el as HTMLElement
+            // FILTER: Don't hide the main Staff Lines!
+            // Staff lines are usually long paths. We skip wide elements.
+            const rect = element.getBoundingClientRect()
+            if (rect.width > 150) return // Assume anything wider than 150px is a staff line
+
             const containerRect = containerRef.current!.getBoundingClientRect()
             const elCenterX = (rect.left - containerRect.left) + (rect.width / 2)
+
+            // Bucket into measure
             const match = measureBounds.find(b => elCenterX >= b.left - 10 && elCenterX <= b.right + 10)
             if (match) {
                 if (!newMeasureContentMap.has(match.index)) newMeasureContentMap.set(match.index, [])
-                newMeasureContentMap.get(match.index)!.push(el as HTMLElement)
+                newMeasureContentMap.get(match.index)!.push(element)
             }
         })
 
@@ -239,11 +240,14 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                 // Future: Hidden
                 elements.forEach(el => el.style.opacity = '0')
             } else {
-                // Current Measure: Show generic stuff, let Note loop handle specific notes
+                // Current Measure: 
+                // Show Generic items (Beams, Rests, etc) 
+                // BUT keep Notes/Stems hidden (animation loop reveals them)
                 elements.forEach(el => {
-                    // Show beams/rests/stems initially to avoid flickering
-                    // Note-specific stems will be hidden by the loop below if needed
-                    if (!el.classList.contains('vf-stavenote')) {
+                    const isNote = el.classList.contains('vf-stavenote')
+                    const isStem = el.classList.contains('vf-stem')
+
+                    if (!isNote && !isStem) {
                         el.style.opacity = '1'
                     }
                 })
@@ -347,11 +351,10 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
 
             // 3. Mode Specific Logic
 
-            // A. CURTAIN MODE: Slide the white box with OFFSET
+            // A. CURTAIN MODE
             if (curtainRef.current) {
                 if (revealMode === 'CURTAIN') {
                     curtainRef.current.style.display = 'block'
-                    // FIX: Added 180px lookahead (~3 notes)
                     const curtainLookahead = 180
                     curtainRef.current.style.left = `${cursorX + curtainLookahead}px`
                     curtainRef.current.style.width = '50000px'
@@ -387,7 +390,6 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                     if (revealMode === 'NOTE') {
                         if (highlightProgress < noteData.timestamp - lookahead) {
                             noteData.element.style.opacity = '0'
-                            // FIX: Hide the linked stem too!
                             if (noteData.stemElement) noteData.stemElement.style.opacity = '0'
                         } else {
                             noteData.element.style.opacity = '1'

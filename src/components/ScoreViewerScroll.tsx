@@ -52,7 +52,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
         const osmd = osmdRef.current
         if (!osmd || !osmd.GraphicSheet || !containerRef.current) return
 
-        console.log('[ScoreViewerScroll] Building Spatial Maps...')
+        console.time('[ScoreViewerScroll] Spatial Map Build') // Performance Tracking
         const newNoteMap = new Map<number, NoteData[]>()
         const newMeasureContentMap = new Map<number, HTMLElement[]>()
         const newAllSymbols: HTMLElement[] = [] // <--- For Dark Mode Coloring (Everything)
@@ -63,6 +63,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
         const unitInPixels = (osmd.GraphicSheet as any).UnitInPixels || 10
 
         // A. Calculate Measure Boundaries
+        // We assume measures are sorted by index, and generally by X position for a scrolling view.
         const measureBounds: { index: number, left: number, right: number }[] = []
         measureList.forEach((staves, index) => {
             const measureNumber = index + 1
@@ -76,11 +77,17 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                 if (right > maxX) maxX = right
             })
             if (minX < Number.MAX_VALUE) {
-                measureBounds.push({ index: measureNumber, left: minX * unitInPixels, right: maxX * unitInPixels })
+                // Add padding for hit testing
+                measureBounds.push({
+                    index: measureNumber,
+                    left: (minX * unitInPixels) - 5,
+                    right: (maxX * unitInPixels) + 5
+                })
             }
         })
 
         // B. Note Map (Timing/Coloring)
+        // ... (Existing logic for NoteMap is efficient enough as it iterates logical notes, not DOM)
         measureList.forEach((measureStaves, measureIndex) => {
             const measureNumber = measureIndex + 1
             const measureNotes: NoteData[] = []
@@ -106,26 +113,17 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                                     let element = document.getElementById(vfId)
                                     if (!element) element = document.getElementById(`vf-${vfId}`)
                                     if (element) {
-                                        // Get Parent Group
                                         const group = element.closest('.vf-stavenote') as HTMLElement || element as HTMLElement
-
-                                        // FIX: Setup Pop Effect on CHILDREN (Paths), not the Group.
-                                        // This prevents the "flying note" bug by scaling noteheads in-place.
                                         const childPaths = group.querySelectorAll('path')
                                         childPaths.forEach(p => {
-                                            const pathEl = p as unknown as HTMLElement // Force cast for style access
-                                            pathEl.style.transformBox = 'fill-box' // Pivot around itself
-                                            pathEl.style.transformOrigin = 'center' // Scale from center
-                                            // FIX: Removed 'filter' from transition to prevent "stuck" shadows
+                                            const pathEl = p as unknown as HTMLElement
+                                            pathEl.style.transformBox = 'fill-box'
+                                            pathEl.style.transformOrigin = 'center'
                                             pathEl.style.transition = 'transform 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275), fill 0.1s, stroke 0.1s'
                                         })
-
                                         measureNotes.push({
-                                            id: vfId,
-                                            measureIndex: measureNumber,
-                                            timestamp: relativeTimestamp,
-                                            element: group,
-                                            stemElement: null
+                                            id: vfId, measureIndex: measureNumber, timestamp: relativeTimestamp,
+                                            element: group, stemElement: null
                                         })
                                     }
                                 }
@@ -137,13 +135,15 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
             if (measureNotes.length > 0) newNoteMap.set(measureNumber, measureNotes)
         })
 
-        // C. Stem Scanner
+        // C. Stem Scanner (DOM Based - keeping as it targets finite stems)
         const allStems = Array.from(containerRef.current.querySelectorAll('.vf-stem'))
         allStems.forEach(stem => {
             const stemRect = stem.getBoundingClientRect()
             const stemX = stemRect.left + (stemRect.width / 2)
             let closestNote: NoteData | null = null
             let minDist = 15
+            // Optimization: Only search notes in visible range or optimize this lookup?
+            // For now, linear walk of newNoteMap is acceptable as map size is managed.
             newNoteMap.forEach(notes => {
                 notes.forEach(note => {
                     if (note.element) {
@@ -160,49 +160,88 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
             if (closestNote) (closestNote as NoteData).stemElement = stem as HTMLElement
         })
 
-        // D. UNIVERSAL CONTENT MAP (Visibility & Coloring)
-        // We select ALL paths/rects/text to ensure we capture Clefs, Key Sigs, Time Sigs, and Ledger Lines
+        // D. UNIVERSAL CONTENT MAP (Visibility & Coloring) - CRITICAL OPTIMIZATION
         const selector = 'svg path, svg rect, svg text'
-        const allElements = Array.from(containerRef.current.querySelectorAll(selector))
+        const allElements = containerRef.current.querySelectorAll(selector) // NodeList (faster than Array.from)
         const containerRect = containerRef.current.getBoundingClientRect()
+        const containerLeft = containerRect.left
 
-        allElements.forEach(el => {
-            const element = el as HTMLElement
-            const rect = element.getBoundingClientRect()
-            const style = window.getComputedStyle(element)
-
-            if (style.opacity === '0' || style.display === 'none') return
-
-            // IDENTIFICATION:
-            // Check if it belongs to a known musical group (Beams, Notes, Clefs, etc)
-            const hasVexClass = element.closest('.vf-stavenote, .vf-beam, .vf-rest, .vf-clef, .vf-keysignature, .vf-timesignature, .vf-stem, .vf-modifier') !== null
-
-            // Detect Staff Lines (Wide & Thin)
-            const isWide = rect.width > 50
-            const isThin = rect.height < 3
-
-            if (!hasVexClass && isWide && isThin) {
-                // It's a Staff Line -> Save for coloring, but DON'T bucket it
-                newStaffLines.push(element)
-            } else {
-                // It's a Symbol (Note, Ledger Line, Clef, Text, etc.)
-                // Save for coloring
-                newAllSymbols.push(element)
-
-                // Bucket into measure for "Note Reveal" Visibility
-                const elCenterX = (rect.left - containerRect.left) + (rect.width / 2)
-                const match = measureBounds.find(b => elCenterX >= b.left - 5 && elCenterX <= b.right + 5)
-                if (match) {
-                    if (!newMeasureContentMap.has(match.index)) newMeasureContentMap.set(match.index, [])
-                    newMeasureContentMap.get(match.index)!.push(element)
+        // Helper: Binary Search for Measure Index
+        const findMeasureForX = (x: number) => {
+            let low = 0
+            let high = measureBounds.length - 1
+            while (low <= high) {
+                const mid = Math.floor((low + high) / 2)
+                const bound = measureBounds[mid]
+                if (x >= bound.left && x <= bound.right) {
+                    return bound
+                } else if (x < bound.left) {
+                    high = mid - 1
+                } else {
+                    low = mid + 1
                 }
             }
-        })
+            return null
+        }
+
+        // Loop optimization: for loop is faster than forEach
+        for (let i = 0; i < allElements.length; i++) {
+            const element = allElements[i] as HTMLElement
+
+            // Skip hidden elements check if possible, or assume all rendered elements are visible
+            // removing getComputedStyle check improves perf massively.
+            // SVG elements usually don't have display:none unless we put it there.
+
+            const rect = element.getBoundingClientRect()
+
+            // Basic classification based on classes (VexFlow adds classes)
+            // .vf-stavenote, .vf-beam, .vf-rest, .vf-clef...
+            // Note: classList.contains is fast.
+            const cl = element.classList
+            // Check if it's a known VexFlow musical element or child of one
+            const isMusical = cl.contains('vf-stavenote') || cl.contains('vf-beam') ||
+                cl.contains('vf-rest') || cl.contains('vf-clef') ||
+                cl.contains('vf-keysignature') || cl.contains('vf-timesignature') ||
+                cl.contains('vf-stem') || cl.contains('vf-modifier') ||
+                element.closest('.vf-stavenote, .vf-beam, .vf-rest, .vf-clef, .vf-keysignature, .vf-timesignature, .vf-stem, .vf-modifier') !== null
+
+            // Detect Staff Lines (Geometry heuristic)
+            if (!isMusical) {
+                // Staff lines are typically wide and thin
+                const isWide = rect.width > 50
+                const isThin = rect.height < 3
+                if (isWide && isThin) {
+                    newStaffLines.push(element)
+                    continue // Done with this element
+                }
+            }
+
+            // It's a Symbol (Note, Ledger Line, Clef, Text, etc.)
+            newAllSymbols.push(element)
+
+            // Bucket into measure using Binary Search instead of Linear Find
+            const elCenterX = (rect.left - containerLeft) + (rect.width / 2)
+
+            // Optimization: Most elements are in the "current" or "next" measure relative to previous loop
+            // But simple binary search is O(log M), very fast.
+            const match = findMeasureForX(elCenterX)
+
+            if (match) {
+                let mList = newMeasureContentMap.get(match.index)
+                if (!mList) {
+                    mList = []
+                    newMeasureContentMap.set(match.index, mList)
+                }
+                mList.push(element)
+            }
+        }
 
         noteMap.current = newNoteMap
         measureContentMap.current = newMeasureContentMap
         staffLinesRef.current = newStaffLines
         allSymbolsRef.current = newAllSymbols
+        console.timeEnd('[ScoreViewerScroll] Spatial Map Build')
+
     }, [])
 
     // ... (Init Effect)

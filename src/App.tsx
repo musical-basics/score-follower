@@ -20,7 +20,7 @@ const DEFAULT_XML = '/c-major-exercise.musicxml'
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('PAGE')
-  const [revealMode, setRevealMode] = useState(false)
+  const [revealMode, setRevealMode] = useState<'OFF' | 'NOTE' | 'CURTAIN'>('OFF')
   const [anchors, setAnchors] = useState<Anchor[]>(INITIAL_ANCHORS)
   const [mode, setMode] = useState<AppMode>('PLAYBACK')
   const [projects, setProjects] = useState<Project[]>([])
@@ -408,13 +408,21 @@ function App() {
           {/* Reveal Mode Toggle (Only in Scroll Mode) */}
           {viewMode === 'SCROLL' && (
             <button
-              onClick={() => setRevealMode(p => !p)}
-              className={`px-3 py-2 rounded text-sm font-semibold border transition-colors ${revealMode
-                ? 'bg-purple-600 border-purple-500 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)]'
-                : 'bg-slate-700 border-slate-600 text-gray-300 hover:bg-slate-600'
+              onClick={() => setRevealMode(prev => {
+                if (prev === 'OFF') return 'NOTE'
+                if (prev === 'NOTE') return 'CURTAIN'
+                return 'OFF'
+              })}
+              className={`px-3 py-1 rounded text-sm font-semibold border transition-colors ${revealMode === 'NOTE'
+                  ? 'bg-purple-600 border-purple-500 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)]'
+                  : revealMode === 'CURTAIN'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_10px_rgba(79,70,229,0.5)]'
+                    : 'bg-slate-700 border-slate-600 text-gray-300 hover:bg-slate-600'
                 }`}
             >
-              {revealMode ? '👁️ Reveal ON' : '👁️ Reveal OFF'}
+              {revealMode === 'OFF' && '👁️ Reveal OFF'}
+              {revealMode === 'NOTE' && '🎵 Note Reveal'}
+              {revealMode === 'CURTAIN' && '⬜ Curtain Mode'}
             </button>
           )}
         </div>

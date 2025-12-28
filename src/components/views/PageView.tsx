@@ -1,17 +1,21 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { OpenSheetMusicDisplay as OSMD } from 'opensheetmusicdisplay'
-import type { AppMode } from '../App'
+import type { AppMode } from '../../App'
 
 interface Anchor {
     measure: number
     time: number
 }
 
-interface ScoreViewerProps {
+// Rename Props
+interface PageViewProps {
     audioRef: React.RefObject<HTMLAudioElement | null>
     anchors: Anchor[]
     mode: AppMode
     musicXmlUrl?: string
+    // Optional: Add visual props if we want parity, but user didn't strictly ask to IMPLEMENT them in PageView yet, just "Upgrade PageView" in "Next Steps". 
+    // I'll stick to basic rename first to ensure stability.
+    darkMode?: boolean
 }
 
 type NoteData = {
@@ -21,7 +25,7 @@ type NoteData = {
     element: Element | null
 }
 
-export function ScoreViewer({ audioRef, anchors, mode, musicXmlUrl }: ScoreViewerProps) {
+export function PageView({ audioRef, anchors, mode, musicXmlUrl, darkMode }: PageViewProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const cursorRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null) // 1. NEW: Add a Ref for the outer scrollable wrapper

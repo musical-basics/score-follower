@@ -1,11 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import './App.css'
-import { ScoreViewer } from './components/ScoreViewer'
-import { ScoreViewerScroll } from './components/ScoreViewerScroll'
-import { ModularIsland } from './components/ModularIsland'
+import { PageView } from './components/views/PageView'
+import { ScrollView } from './components/views/ScrollView'
+import { ScoreControls } from './components/controls/ScoreControls'
+import { AnchorSidebar } from './components/controls/AnchorSidebar'
 import { projectService, type Project } from './services/projectService'
 
-interface Anchor {
+// Legacy Imports
+import { ScoreViewer as OldPageView } from './components/_oldComponents/ScoreViewer'
+import { ScoreViewerScroll as OldScrollView } from './components/_oldComponents/ScoreViewerScroll'
+import { ModularIsland as OldModularIsland } from './components/_oldComponents/ModularIsland'
+
+export interface Anchor {
   measure: number
   time: number
 }
@@ -22,20 +28,24 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('PAGE')
   const [revealMode, setRevealMode] = useState<'OFF' | 'NOTE' | 'CURTAIN'>('OFF')
   const [popEffect, setPopEffect] = useState(false)
-  const [jumpEffect, setJumpEffect] = useState(true) // <--- NEW STATE (Default True)
-  const [glowEffect, setGlowEffect] = useState(true) // <--- NEW STATE (Default True)
-  const [isLocked, setIsLocked] = useState(true) // <--- NEW STATE (Default True)
+  const [jumpEffect, setJumpEffect] = useState(true)
+  const [glowEffect, setGlowEffect] = useState(true)
+  const [isLocked, setIsLocked] = useState(true)
   const [darkMode, setDarkMode] = useState(false)
   const [highlightNote, setHighlightNote] = useState(true)
   const [cursorPosition, setCursorPosition] = useState(0.2)
   const [isIslandMode, setIsIslandMode] = useState(false)
+
+  // Legacy Mode State
+  const [legacyMode, setLegacyMode] = useState(false)
+
   const [anchors, setAnchors] = useState<Anchor[]>(INITIAL_ANCHORS)
   const [mode, setMode] = useState<AppMode>('PLAYBACK')
   const [projects, setProjects] = useState<Project[]>([])
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null)
   const [currentProjectTitle, setCurrentProjectTitle] = useState<string | null>(null)
-  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false) // Added missing state
-  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false) // Added missing state
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false)
+  const [isLoadModalOpen, setIsLoadModalOpen] = useState(false)
 
   // File State
   const [audioFile, setAudioFile] = useState<File | null>(null)
@@ -48,8 +58,6 @@ function App() {
   const [currentMeasure, setCurrentMeasure] = useState<number>(1)
 
   const audioRef = useRef<HTMLAudioElement>(null)
-  const anchorListRef = useRef<HTMLDivElement>(null)
-  const activeRowRef = useRef<HTMLDivElement>(null)
 
   // Helper: Find measure based on time
   const getCurrentMeasure = useCallback((time: number) => {
@@ -245,19 +253,11 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (activeRowRef.current) {
-      activeRowRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      })
-    }
+    // Note: scrollIntoView was handled by refs in the old sidebar code. 
+    // In new architecture, we might pass a prop or handle it inside AnchorSidebar.
+    // For now, removing the direct ref manipulation here as the elements are in child component.
   }, [currentMeasure])
 
-  useEffect(() => {
-    if (anchorListRef.current && anchors.length > 0) {
-      anchorListRef.current.scrollTop = anchorListRef.current.scrollHeight
-    }
-  }, [anchors])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -340,211 +340,178 @@ function App() {
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 rounded text-xs font-medium border border-slate-700">
             {viewMode === 'PAGE' ? '∞ Scroll View' : '📄 Page View'}
           </button>
+          <div className="w-px h-6 bg-slate-700 mx-2"></div>
+          <button onClick={() => setLegacyMode(!legacyMode)} className={`px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded border ${legacyMode ? 'bg-amber-500 text-black border-amber-600' : 'bg-slate-800 text-slate-500 border-slate-700'}`}>
+            {legacyMode ? 'Warning: LEGACY MODE' : 'New Architecture'}
+          </button>
         </div>
       </div>
 
-      {/* 2. SUBMENU (UX Controls) - Only visible if NOT in Island Mode */}
-      {viewMode === 'SCROLL' && !isIslandMode && (
-        <div className={`flex items-center justify-between px-6 py-2 border-b shadow-sm z-40 transition-colors duration-300 ${darkMode ? 'bg-[#2a2a2a] border-slate-700 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-700'}`}>
+      {/* 2. CONTROLS (Toolbar or Island) */}
+      {!legacyMode && (
+        <ScoreControls
+          viewMode={viewMode}
+          isIslandMode={isIslandMode}
+          setIsIslandMode={setIsIslandMode}
+          revealMode={revealMode}
+          setRevealMode={setRevealMode}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          isLocked={isLocked}
+          setIsLocked={setIsLocked}
+          highlightNote={highlightNote}
+          setHighlightNote={setHighlightNote}
+          glowEffect={glowEffect}
+          setGlowEffect={setGlowEffect}
+          popEffect={popEffect}
+          setPopEffect={setPopEffect}
+          jumpEffect={jumpEffect}
+          setJumpEffect={setJumpEffect}
+          cursorPosition={cursorPosition}
+          setCursorPosition={setCursorPosition}
+        />
+      )}
 
-          {/* Left: Reveal Modes */}
-          <div className={`flex items-center gap-1 p-1 rounded-lg ${darkMode ? 'bg-slate-800' : 'bg-slate-200'}`}>
-            {(['OFF', 'NOTE', 'CURTAIN'] as const).map(m => (
-              <button
-                key={m}
-                onClick={() => setRevealMode(m)}
-                className={`
-                              px-3 py-1 rounded-md text-xs font-bold transition-all
-                              ${revealMode === m
-                    ? (darkMode ? 'bg-slate-600 text-white shadow-sm' : 'bg-white text-slate-900 shadow-sm')
-                    : (darkMode ? 'text-slate-400 hover:text-slate-200' : 'text-slate-500 hover:text-slate-700')}
-                          `}
-              >
-                {m === 'OFF' ? 'Normal' : m === 'NOTE' ? 'Note Reveal' : 'Curtain'}
-              </button>
-            ))}
-          </div>
+      {/* LEGACY SUBMENU (for Legacy Mode in SCROLL view) */}
+      {legacyMode && viewMode === 'SCROLL' && (
+        <div className="bg-slate-800 border-b border-slate-700 px-4 py-2 flex items-center gap-3 flex-wrap">
+          {/* Mode Toggle */}
+          <button onClick={() => setIsIslandMode(!isIslandMode)} className={`px-3 py-1.5 rounded text-xs font-medium border ${isIslandMode ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-slate-700 text-slate-300 border-slate-600'}`}>
+            {isIslandMode ? '🏝️ Island Mode' : '📌 Docked'}
+          </button>
+          <div className="w-px h-6 bg-slate-600"></div>
 
-          {/* Center: Visual Toggles */}
-          <div className="flex items-center gap-4">
-            <button onClick={() => setDarkMode(!darkMode)} className={`flex items-center gap-2 text-sm font-medium transition-colors ${darkMode ? 'text-slate-300 hover:text-white' : 'text-slate-600 hover:text-slate-900'}`}>
-              <span>{darkMode ? '🌙' : '☀️'}</span>
-              <span>{darkMode ? 'Dark Mode' : 'Light Mode'}</span>
-            </button>
+          {/* Dark Mode */}
+          <button onClick={() => setDarkMode(!darkMode)} className={`px-3 py-1.5 rounded text-xs font-medium ${darkMode ? 'bg-slate-600 text-yellow-300' : 'bg-slate-700 text-slate-300'}`}>
+            {darkMode ? '🌙 Dark' : '☀️ Light'}
+          </button>
 
-            <div className={`w-px h-4 ${darkMode ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
+          {/* Highlight */}
+          <button onClick={() => setHighlightNote(!highlightNote)} className={`px-3 py-1.5 rounded text-xs font-medium ${highlightNote ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+            Color
+          </button>
 
-            <button
-              onClick={() => setIsLocked(!isLocked)}
-              className={`flex items-center gap-2 text-sm font-medium transition-colors ${isLocked ? 'text-emerald-500' : (darkMode ? 'text-slate-500' : 'text-slate-400')}`}
-            >
-              <span>{isLocked ? '🔒 Locked' : '🔓 Free'}</span>
-            </button>
+          {/* Glow */}
+          <button onClick={() => setGlowEffect(!glowEffect)} className={`px-3 py-1.5 rounded text-xs font-medium ${glowEffect ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+            ✨ Glow
+          </button>
 
-            <div className={`w-px h-4 ${darkMode ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
+          {/* Pop */}
+          <button onClick={() => setPopEffect(!popEffect)} className={`px-3 py-1.5 rounded text-xs font-medium ${popEffect ? 'bg-pink-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+            💥 Pop
+          </button>
 
-            <label className={`flex items-center gap-2 text-sm font-medium cursor-pointer transition-colors ${darkMode ? 'text-slate-300 hover:text-emerald-400' : 'text-slate-700 hover:text-emerald-600'}`}>
-              <input type="checkbox" checked={highlightNote} onChange={e => setHighlightNote(e.target.checked)} className="accent-emerald-500" />
-              Highlight
-            </label>
+          {/* Jump */}
+          <button onClick={() => setJumpEffect(!jumpEffect)} className={`px-3 py-1.5 rounded text-xs font-medium ${jumpEffect ? 'bg-orange-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
+            ⤴ Jump
+          </button>
 
-            {/* FX Group */}
-            <div className={`flex items-center gap-3 px-3 py-1 rounded border ${darkMode ? 'border-slate-700 bg-slate-800' : 'border-slate-300 bg-slate-200'}`}>
-              <label className="flex items-center gap-1 text-xs font-bold cursor-pointer hover:text-cyan-500">
-                <input type="checkbox" checked={glowEffect} onChange={e => setGlowEffect(e.target.checked)} className="accent-cyan-500" /> Glow
-              </label>
-              <label className="flex items-center gap-1 text-xs font-bold cursor-pointer hover:text-pink-500">
-                <input type="checkbox" checked={popEffect} onChange={e => setPopEffect(e.target.checked)} className="accent-pink-500" /> Pop
-              </label>
-              <label className="flex items-center gap-1 text-xs font-bold cursor-pointer hover:text-orange-500">
-                <input type="checkbox" checked={jumpEffect} onChange={e => setJumpEffect(e.target.checked)} className="accent-orange-500" /> Jump
-              </label>
-            </div>
-          </div>
+          {/* Lock */}
+          <button onClick={() => setIsLocked(!isLocked)} className={`px-3 py-1.5 rounded text-xs font-bold ${isLocked ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-slate-700 text-slate-400'}`}>
+            {isLocked ? '🔒 Locked' : '🔓 Free'}
+          </button>
 
-          {/* Right: Cursor & Breakout */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-mono ${darkMode ? 'text-slate-500' : 'text-slate-400'}`}>Cursor</span>
-              <input
-                type="range" min="0.2" max="0.8" step="0.01"
-                value={cursorPosition}
-                onChange={e => setCursorPosition(parseFloat(e.target.value))}
-                disabled={!isLocked}
-                className="w-24 h-1.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-slate-600"
-              />
-            </div>
-
-            <div className={`w-px h-4 ${darkMode ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
-
-            {/* BREAKOUT BUTTON */}
-            <button
-              onClick={() => setIsIslandMode(true)}
-              title="Detach Controls (Float)"
-              className={`p-1.5 rounded transition-colors ${darkMode ? 'hover:bg-slate-700 text-slate-400' : 'hover:bg-slate-200 text-slate-500 hover:text-slate-900'}`}
-            >
-              ↗
-            </button>
+          {/* Cursor Slider */}
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[10px] text-slate-400 font-mono">Cursor: {Math.round(cursorPosition * 100)}%</span>
+            <input type="range" min="0.2" max="0.8" step="0.01" value={cursorPosition} onChange={(e) => setCursorPosition(parseFloat(e.target.value))} className="w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-cyan-400" />
           </div>
         </div>
       )}
 
-      {/* Main Content (Flex Row) */}
+      {/* 3. MAIN CONTENT */}
       <div className="flex-1 flex overflow-hidden">
 
         {/* Score Area */}
         <div className="flex-1 relative overflow-hidden flex flex-col">
           {viewMode === 'PAGE' ? (
-            <ScoreViewer
-              audioRef={audioRef} anchors={anchors} mode={mode} musicXmlUrl={xmlUrl || DEFAULT_XML}
-            />
+            legacyMode ? (
+              <OldPageView audioRef={audioRef} anchors={anchors} mode={mode} musicXmlUrl={xmlUrl || DEFAULT_XML} />
+            ) : (
+              <PageView audioRef={audioRef} anchors={anchors} mode={mode} musicXmlUrl={xmlUrl || DEFAULT_XML} />
+            )
           ) : (
-            <ScoreViewerScroll
-              audioRef={audioRef} anchors={anchors} mode={mode} musicXmlUrl={xmlUrl || DEFAULT_XML}
-              revealMode={revealMode} popEffect={popEffect} darkMode={darkMode}
-              glowEffect={glowEffect} // <--- Pass Prop
-              jumpEffect={jumpEffect} // <--- Pass Prop
-              highlightNote={highlightNote} cursorPosition={cursorPosition}
-              isLocked={isLocked} // <--- Pass Prop
-            />
+            legacyMode ? (
+              <OldScrollView
+                audioRef={audioRef} anchors={anchors} mode={mode} musicXmlUrl={xmlUrl || DEFAULT_XML}
+                revealMode={revealMode} popEffect={popEffect} darkMode={darkMode}
+                glowEffect={glowEffect} jumpEffect={jumpEffect}
+                highlightNote={highlightNote} cursorPosition={cursorPosition} isLocked={isLocked}
+              />
+            ) : (
+              <ScrollView
+                audioRef={audioRef} anchors={anchors} mode={mode} musicXmlUrl={xmlUrl || DEFAULT_XML}
+                revealMode={revealMode} popEffect={popEffect} darkMode={darkMode}
+                glowEffect={glowEffect}
+                jumpEffect={jumpEffect}
+                highlightNote={highlightNote} cursorPosition={cursorPosition}
+                isLocked={isLocked}
+              />
+            )
           )}
 
           {/* MODULAR ISLAND (Only visible if isIslandMode is TRUE) */}
+          {/* Support Legacy Island too if needed, but the main goal is comparing core scrolling behavior. 
+              The user asked 'hook this up to the app view'. 
+              If legacyMode is ON, we might want the old island if in SCROLL mode.
+              However, the 'OldModularIsland' was built to work with 'OldScrollView' via props? 
+              Actually, the OldModularIsland took setPopEffect etc. 
+              If we want FULL parity, we should render OldModularIsland if legacyMode is on.
+          */}
           {viewMode === 'SCROLL' && isIslandMode && (
-            <ModularIsland
-              popEffect={popEffect} setPopEffect={setPopEffect}
-              glowEffect={glowEffect} setGlowEffect={setGlowEffect} // <--- Pass Props
-              jumpEffect={jumpEffect} setJumpEffect={setJumpEffect} // <--- Pass Props
-              darkMode={darkMode} setDarkMode={setDarkMode}
-              highlightNote={highlightNote} setHighlightNote={setHighlightNote}
-              cursorPosition={cursorPosition} setCursorPosition={setCursorPosition}
-              isLocked={isLocked} setIsLocked={setIsLocked} // <--- Pass Props
-              onDock={() => setIsIslandMode(false)}
-            />
+            legacyMode ? (
+              <OldModularIsland
+                popEffect={popEffect} setPopEffect={setPopEffect}
+                glowEffect={glowEffect} setGlowEffect={setGlowEffect}
+                jumpEffect={jumpEffect} setJumpEffect={setJumpEffect}
+                darkMode={darkMode} setDarkMode={setDarkMode}
+                highlightNote={highlightNote} setHighlightNote={setHighlightNote}
+                cursorPosition={cursorPosition} setCursorPosition={setCursorPosition}
+                isLocked={isLocked} setIsLocked={setIsLocked}
+                onDock={() => setIsIslandMode(false)}
+              />
+            ) : (
+              <ScoreControls
+                viewMode={viewMode}
+                isIslandMode={isIslandMode}
+                setIsIslandMode={setIsIslandMode}
+                revealMode={revealMode}
+                setRevealMode={setRevealMode}
+                darkMode={darkMode}
+                setDarkMode={setDarkMode}
+                isLocked={isLocked}
+                setIsLocked={setIsLocked}
+                highlightNote={highlightNote}
+                setHighlightNote={setHighlightNote}
+                glowEffect={glowEffect}
+                setGlowEffect={setGlowEffect}
+                popEffect={popEffect}
+                setPopEffect={setPopEffect}
+                jumpEffect={jumpEffect}
+                setJumpEffect={setJumpEffect}
+                cursorPosition={cursorPosition}
+                setCursorPosition={setCursorPosition}
+              />
+            )
           )}
         </div>
 
         {/* Sidebar (Sync Anchors) */}
-        <aside className={`w-[320px] border-l flex flex-col shadow-xl z-30 transition-colors duration-300 ${darkMode ? 'bg-[#1a1a1a] border-slate-800' : 'bg-white border-gray-300'}`}>
-
-          {/* Playback Controls / Mode Toggle */}
-          <div className={`p-4 border-b flex items-center gap-2 ${darkMode ? 'border-slate-800 bg-[#222222]' : 'border-gray-200 bg-gray-50'}`}>
-            <button
-              onClick={toggleMode}
-              className={`flex-1 py-2 rounded-lg font-bold text-sm transition-all ${mode === 'RECORD'
-                ? 'bg-red-500 text-white shadow-red-500/20'
-                : 'bg-emerald-500 text-white shadow-emerald-500/20'
-                }`}
-            >
-              {mode === 'RECORD' ? '🔴 REC Mode' : '▶️ PLAY Mode'}
-            </button>
-          </div>
-
-          {/* Inputs */}
-          <div className={`p-4 border-b space-y-3 ${darkMode ? 'border-slate-800 bg-[#222222]' : 'border-gray-200 bg-gray-50'}`}>
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>Audio Source</label>
-              <input type="file" accept="audio/*" onChange={handleAudioSelect} className={`text-xs w-full ${darkMode ? 'text-slate-300' : ''}`} />
-            </div>
-            <div>
-              <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1 ${darkMode ? 'text-slate-500' : 'text-gray-400'}`}>Score XML</label>
-              <input type="file" accept=".xml,.musicxml" onChange={handleXmlSelect} className={`text-xs w-full ${darkMode ? 'text-slate-300' : ''}`} />
-            </div>
-          </div>
-
-          {/* Anchors List */}
-          <div className={`flex-1 overflow-y-auto p-2 space-y-1 ${darkMode ? 'bg-[#1a1a1a]' : 'bg-slate-50'}`} ref={anchorListRef}>
-            {/* Logic to render anchors (Simulated for brevity, using same logic as before) */}
-            {(() => {
-              const maxMeasure = anchors.length > 0 ? Math.max(...anchors.map(a => a.measure)) : 0
-              const rows = []
-              for (let m = 1; m <= maxMeasure; m++) {
-                const anchor = anchors.find(a => a.measure === m)
-                const isActive = m === currentMeasure
-
-                if (anchor) {
-                  rows.push(
-                    <div key={m} ref={isActive ? activeRowRef : null}
-                      className={`flex items-center justify-between p-2 rounded text-xs border ${isActive ? (darkMode ? 'bg-orange-900/30 border-orange-600 ring-1 ring-orange-500/30' : 'bg-orange-50 border-orange-300 ring-1 ring-orange-200') : (darkMode ? 'bg-[#222222] border-slate-700' : 'bg-white border-gray-200')}`}
-                      onClick={() => handleJumpToMeasure(anchor.time)}
-                    >
-                      <span className={`font-mono font-bold ${isActive ? 'text-orange-500' : (darkMode ? 'text-slate-300' : 'text-slate-500')}`}>M{m}</span>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number" step="0.01"
-                          value={anchor.time.toFixed(2)}
-                          onChange={(e) => upsertAnchor(m, parseFloat(e.target.value))}
-                          disabled={mode !== 'RECORD' || m === 1}
-                          className={`w-16 text-right border rounded px-1 font-mono ${darkMode ? 'bg-slate-800 border-slate-600 text-emerald-400' : 'bg-white border-gray-300'}`}
-                          onClick={e => e.stopPropagation()}
-                        />
-                        {m !== 1 && mode === 'RECORD' && (
-                          <button onClick={(e) => { e.stopPropagation(); handleDelete(m) }} className={`${darkMode ? 'text-slate-500 hover:text-red-400' : 'text-slate-400 hover:text-red-500'}`}>×</button>
-                        )}
-                      </div>
-                    </div>
-                  )
-                } else {
-                  rows.push(
-                    <div key={m} className={`flex items-center justify-between p-2 rounded text-xs border border-dashed opacity-60 ${darkMode ? 'border-red-800 bg-red-900/20' : 'border-red-200 bg-red-50'}`}>
-                      <span className={`font-mono ${darkMode ? 'text-red-400' : 'text-red-400'}`}>M{m} (Ghost)</span>
-                      {mode === 'RECORD' && (
-                        <button onClick={() => handleRestamp(m)} className={`text-[10px] px-2 py-0.5 rounded ${darkMode ? 'bg-red-900/50 text-red-400' : 'bg-red-100 text-red-600'}`}>Fix</button>
-                      )}
-                    </div>
-                  )
-                }
-              }
-              return rows
-            })()}
-          </div>
-
-          {/* Footer Controls (Tap/Clear) */}
-          <div className={`p-4 border-t grid grid-cols-2 gap-2 ${darkMode ? 'border-slate-800 bg-[#222222]' : 'border-gray-200 bg-white'}`}>
-            <button onClick={handleReset} disabled={mode !== 'RECORD'} className={`py-2 rounded border text-xs font-bold ${darkMode ? 'border-slate-700 text-slate-400 hover:bg-slate-800' : 'border-slate-200 text-slate-500 hover:bg-slate-50'}`}>Clear All</button>
-            <button onClick={handleTap} disabled={mode !== 'RECORD'} className="py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg shadow-indigo-500/20">TAP (A)</button>
-          </div>
-        </aside>
+        <AnchorSidebar
+          anchors={anchors}
+          darkMode={darkMode}
+          upsertAnchor={upsertAnchor}
+          handleDelete={handleDelete}
+          handleRestamp={handleRestamp}
+          handleJumpToMeasure={handleJumpToMeasure}
+          handleTap={handleTap}
+          handleReset={handleReset}
+          mode={mode}
+          currentMeasure={currentMeasure}
+          handleAudioSelect={handleAudioSelect}
+          handleXmlSelect={handleXmlSelect}
+          toggleMode={toggleMode}
+        />
 
       </div>
 

@@ -1,13 +1,14 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
-import { OpenSheetMusicDisplay as OSMD } from 'opensheetmusicdisplay'
-import type { AppMode } from '../App'
+import { useEffect, useRef, useCallback } from 'react'
+// import { OpenSheetMusicDisplay as OSMD } from 'opensheetmusicdisplay' // Removed, handled by hook
+import type { AppMode } from '../../App'
+import { useOSMD } from '../../hooks/useOSMD'
 
 interface Anchor {
     measure: number
     time: number
 }
 
-interface ScoreViewerProps {
+interface ScrollViewProps {
     audioRef: React.RefObject<HTMLAudioElement | null>
     anchors: Anchor[]
     mode: AppMode
@@ -16,8 +17,8 @@ interface ScoreViewerProps {
     popEffect: boolean
     darkMode: boolean
     highlightNote: boolean
-    glowEffect: boolean         // <--- NEW PROP
-    jumpEffect: boolean         // <--- NEW PROP
+    glowEffect: boolean
+    jumpEffect: boolean
     cursorPosition: number
     isLocked: boolean
 }
@@ -30,7 +31,7 @@ type NoteData = {
     stemElement: HTMLElement | null
 }
 
-export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, revealMode, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition, isLocked }: ScoreViewerProps) {
+export function ScrollView({ audioRef, anchors, mode, musicXmlUrl, revealMode, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition, isLocked }: ScrollViewProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const cursorRef = useRef<HTMLDivElement>(null)
     const curtainRef = useRef<HTMLDivElement>(null)
@@ -39,8 +40,13 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
     const lastMeasureIndexRef = useRef<number>(-1)
     const prevRevealModeRef = useRef<'OFF' | 'NOTE' | 'CURTAIN'>('OFF')
 
-    const osmdRef = useRef<OSMD | null>(null)
-    const [isLoaded, setIsLoaded] = useState(false)
+    // const osmdRef = useRef<OSMD | null>(null) // Replaced by hook
+    // const [isLoaded, setIsLoaded] = useState(false) // Replaced by hook
+    const { osmdRef, isLoaded } = useOSMD(containerRef as React.RefObject<HTMLDivElement>, musicXmlUrl, {
+        autoResize: true, followCursor: false, drawTitle: true, drawSubtitle: false,
+        drawComposer: false, drawCredits: false, drawPartNames: true, drawMeasureNumbers: true,
+        renderSingleHorizontalStaffline: true
+    })
     const animationFrameRef = useRef<number | null>(null)
 
     const noteMap = useRef<Map<number, NoteData[]>>(new Map())
@@ -245,7 +251,8 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
 
     }, [])
 
-    // ... (Init Effect)
+    // ... (Init Effect) - REMOVED (Handled by hook)
+    /*
     useEffect(() => {
         if (!containerRef.current || osmdRef.current) return
         const osmd = new OSMD(containerRef.current, {
@@ -263,6 +270,14 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
         }).catch((err) => console.error(err))
         return () => { osmdRef.current = null; setIsLoaded(false) }
     }, [musicXmlUrl, calculateNoteMap])
+    */
+
+    // We still need to trigger map calculation when loaded
+    useEffect(() => {
+        if (isLoaded) {
+            setTimeout(() => calculateNoteMap(), 100)
+        }
+    }, [isLoaded, calculateNoteMap])
 
     // ... (Resize Effect)
     useEffect(() => {
@@ -508,7 +523,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
 
                 // Spatial Reveal Logic
                 const currentElements = measureContentMap.current.get(measure)
-                if (currentElements) {
+                if (currentElements && containerRef.current) {
                     const containerRect = containerRef.current.getBoundingClientRect()
                     currentElements.forEach(el => {
                         const rect = el.getBoundingClientRect()
@@ -675,7 +690,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                     left: 0, top: 0, width: '3px', height: '100px',
                     backgroundColor: mode === 'RECORD' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.8)',
                     boxShadow: mode === 'RECORD' ? '0 0 10px rgba(239, 68, 68, 0.4)' : '0 0 8px rgba(16, 185, 129, 0.5)',
-                    zIndex: 1000, display: 'none', transition: 'left 0.05s linear',
+                    zIndex: 1000, display: 'none',
                 }}
             />
 

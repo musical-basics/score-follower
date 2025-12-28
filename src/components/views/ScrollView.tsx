@@ -685,12 +685,15 @@ export function ScrollView({ audioRef, anchors, mode, musicXmlUrl, revealMode, p
             <div ref={containerRef} onClick={handleScoreClick} className="w-full min-h-[400px] cursor-pointer" />
 
             {/* The Cursor */}
-            <div ref={cursorRef} id="cursor-overlay" className="absolute pointer-events-none transition-all duration-75"
+            <div ref={cursorRef} id="cursor-overlay" className="absolute pointer-events-none"
                 style={{
                     left: 0, top: 0, width: '3px', height: '100px',
                     backgroundColor: mode === 'RECORD' ? 'rgba(239, 68, 68, 0.6)' : 'rgba(16, 185, 129, 0.8)',
                     boxShadow: mode === 'RECORD' ? '0 0 10px rgba(239, 68, 68, 0.4)' : '0 0 8px rgba(16, 185, 129, 0.5)',
                     zIndex: 1000, display: 'none',
+                    // FIX: Disable transition during playback to stop cursor shake.
+                    // CSS transitions conflict with JS-driven scroll locking.
+                    transition: 'none',
                 }}
             />
 

@@ -24,6 +24,7 @@ function App() {
   const [popEffect, setPopEffect] = useState(false)
   const [jumpEffect, setJumpEffect] = useState(true) // <--- NEW STATE (Default True)
   const [glowEffect, setGlowEffect] = useState(true) // <--- NEW STATE (Default True)
+  const [isLocked, setIsLocked] = useState(true) // <--- NEW STATE (Default True)
   const [darkMode, setDarkMode] = useState(false)
   const [highlightNote, setHighlightNote] = useState(true)
   const [cursorPosition, setCursorPosition] = useState(0.2)
@@ -373,6 +374,15 @@ function App() {
 
             <div className={`w-px h-4 ${darkMode ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
 
+            <button
+              onClick={() => setIsLocked(!isLocked)}
+              className={`flex items-center gap-2 text-sm font-medium transition-colors ${isLocked ? 'text-emerald-500' : (darkMode ? 'text-slate-500' : 'text-slate-400')}`}
+            >
+              <span>{isLocked ? '🔒 Locked' : '🔓 Free'}</span>
+            </button>
+
+            <div className={`w-px h-4 ${darkMode ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
+
             <label className={`flex items-center gap-2 text-sm font-medium cursor-pointer transition-colors ${darkMode ? 'text-slate-300 hover:text-emerald-400' : 'text-slate-700 hover:text-emerald-600'}`}>
               <input type="checkbox" checked={highlightNote} onChange={e => setHighlightNote(e.target.checked)} className="accent-emerald-500" />
               Highlight
@@ -400,6 +410,7 @@ function App() {
                 type="range" min="0.2" max="0.8" step="0.01"
                 value={cursorPosition}
                 onChange={e => setCursorPosition(parseFloat(e.target.value))}
+                disabled={!isLocked}
                 className="w-24 h-1.5 bg-slate-300 rounded-lg appearance-none cursor-pointer accent-slate-600"
               />
             </div>
@@ -434,6 +445,7 @@ function App() {
               glowEffect={glowEffect} // <--- Pass Prop
               jumpEffect={jumpEffect} // <--- Pass Prop
               highlightNote={highlightNote} cursorPosition={cursorPosition}
+              isLocked={isLocked} // <--- Pass Prop
             />
           )}
 
@@ -446,6 +458,7 @@ function App() {
               darkMode={darkMode} setDarkMode={setDarkMode}
               highlightNote={highlightNote} setHighlightNote={setHighlightNote}
               cursorPosition={cursorPosition} setCursorPosition={setCursorPosition}
+              isLocked={isLocked} setIsLocked={setIsLocked} // <--- Pass Props
               onDock={() => setIsIslandMode(false)}
             />
           )}

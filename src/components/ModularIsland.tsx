@@ -1,67 +1,59 @@
-
 import { useState, useEffect, useRef } from 'react'
 
 interface ModularIslandProps {
     popEffect: boolean
     setPopEffect: (val: boolean) => void
-    jumpEffect: boolean             // <--- NEW PROP
-    setJumpEffect: (val: boolean) => void // <--- NEW PROP
+    jumpEffect: boolean
+    setJumpEffect: (val: boolean) => void
+    glowEffect: boolean
+    setGlowEffect: (val: boolean) => void
     darkMode: boolean
     setDarkMode: (val: boolean) => void
-    highlightNote: boolean      // <--- NEW PROP
-    setHighlightNote: (val: boolean) => void // <--- NEW PROP
-    glowEffect: boolean             // <--- NEW PROP
-    setGlowEffect: (val: boolean) => void // <--- NEW PROP
+    highlightNote: boolean
+    setHighlightNote: (val: boolean) => void
     cursorPosition: number
-    setCursorPosition: (val: number) => void // <--- NEW PROP
-    onDock: () => void // <--- NEW PROP
+    setCursorPosition: (val: number) => void
+    isLocked: boolean
+    setIsLocked: (val: boolean) => void
+    onDock: () => void
 }
 
 export function ModularIsland({
     popEffect, setPopEffect,
-    jumpEffect, setJumpEffect, // <--- Destructure
+    jumpEffect, setJumpEffect,
+    glowEffect, setGlowEffect,
     darkMode, setDarkMode,
     highlightNote, setHighlightNote,
-    glowEffect, setGlowEffect, // <--- Destructure
     cursorPosition, setCursorPosition,
+    isLocked, setIsLocked,
     onDock
 }: ModularIslandProps) {
-    const [position, setPosition] = useState({ x: window.innerWidth - 250, y: 100 })
+    const [position, setPosition] = useState({ x: window.innerWidth - 320, y: 100 })
     const [isDragging, setIsDragging] = useState(false)
     const dragOffset = useRef({ x: 0, y: 0 })
     const islandRef = useRef<HTMLDivElement>(null)
 
-    // 2. Load Position from LocalStorage on Mount
     useEffect(() => {
         const savedPos = localStorage.getItem('modularIslandPos')
         if (savedPos) {
-            try {
-                const parsed = JSON.parse(savedPos)
-                setPosition(parsed)
-            } catch (e) {
-                console.error("Failed to parse island position", e)
-            }
+            try { setPosition(JSON.parse(savedPos)) } catch (e) { }
         }
     }, [])
 
     const handleMouseDown = (e: React.MouseEvent) => {
+        if (isLocked) return
         setIsDragging(true)
         const rect = islandRef.current?.getBoundingClientRect()
-        if (rect) {
-            dragOffset.current = {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            }
-        }
+        if (rect) dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
     }
 
     const handleMouseMove = (e: MouseEvent) => {
-        if (!isDragging) return
+        if (!isDragging || isLocked) return
         setPosition({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y })
     }
 
     const handleMouseUp = () => {
-        if (isDragging) {
+        if (isDragging && !isLocked) {
             setIsDragging(false)
             localStorage.setItem('modularIslandPos', JSON.stringify(position))
         }
@@ -79,40 +71,43 @@ export function ModularIsland({
             window.removeEventListener('mousemove', handleMouseMove)
             window.removeEventListener('mouseup', handleMouseUp)
         }
-    }, [isDragging, position])
+    }, [isDragging, isLocked])
 
     return (
         <div
             ref={islandRef}
             onMouseDown={handleMouseDown}
-            className="fixed z-[2000] flex flex-col gap-2 items-end select-none cursor-move active:cursor-grabbing"
+            className={`fixed z-[2000] flex flex-col gap-2 items-end select-none ${isLocked ? 'cursor-default' : 'cursor-move active:cursor-grabbing'}`}
             style={{ left: position.x, top: position.y, width: 'max-content' }}
         >
             <div className={`
-                bg-slate-800/90 backdrop-blur-md text-white p-3 rounded-2xl
-                shadow-2xl border border-slate-600 flex flex-col gap-3
-                transition-transform hover:scale-105
-                ${isDragging ? 'scale-105 ring-2 ring-emerald-500/50' : ''}
+                bg-slate-800/95 backdrop-blur-md text-white p-3 rounded-2xl 
+                shadow-2xl border border-slate-600 flex flex-col gap-3 
+                transition-transform hover:scale-[1.02] w-[300px]
+                ${isDragging ? 'scale-[1.02] ring-2 ring-emerald-500/50' : ''}
             `}>
+                {/* Header Row */}
                 <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-2">
-                        <div className="text-slate-500 cursor-move">
-                            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                                <circle cx="2" cy="2" r="2" /><circle cx="8" cy="2" r="2" /><circle cx="14" cy="2" r="2" />
-                                <circle cx="2" cy="8" r="2" /><circle cx="8" cy="8" r="2" /><circle cx="14" cy="8" r="2" />
-                                <circle cx="2" cy="14" r="2" /><circle cx="8" cy="14" r="2" /><circle cx="14" cy="14" r="2" />
-                            </svg>
-                        </div>
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                            Floating Controls
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">
+                            Controls
                         </span>
-                    </div>
 
-                    {/* DOCK BUTTON */}
+                        {/* LOCK TOGGLE */}
+                        <button
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => setIsLocked(!isLocked)}
+                            className={`
+                                flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors
+                                ${isLocked ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-slate-700 text-slate-400'}
+                            `}
+                        >
+                            {isLocked ? '🔒 Locked' : '🔓 Free'}
+                        </button>
+                    </div>
                     <button
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={onDock}
-                        title="Dock to Menu Bar"
                         className="p-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-all"
                     >
                         ↘
@@ -121,12 +116,12 @@ export function ModularIsland({
 
                 <div className="h-px w-full bg-slate-600"></div>
 
-                {/* Controls Row 1 */}
+                {/* Row 1: Mode & Color */}
                 <div className="flex items-center justify-between gap-2">
                     <button
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={() => setDarkMode(!darkMode)}
-                        className={`flex-1 py-1.5 rounded-lg text-sm font-medium transition-all ${darkMode ? 'bg-slate-600 text-yellow-300' : 'bg-slate-700 text-slate-300'}`}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${darkMode ? 'bg-slate-600 text-yellow-300' : 'bg-slate-700 text-slate-300'}`}
                     >
                         {darkMode ? '🌙 Dark' : '☀️ Light'}
                     </button>
@@ -135,7 +130,7 @@ export function ModularIsland({
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={() => setHighlightNote(!highlightNote)}
                         className={`
-                            flex-1 py-1.5 rounded-lg text-sm font-medium transition-all
+                            flex-1 py-1.5 rounded-lg text-xs font-bold transition-all
                             ${highlightNote ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-400'}
                         `}
                     >
@@ -143,9 +138,8 @@ export function ModularIsland({
                     </button>
                 </div>
 
-                {/* Controls Row 2 (FX) */}
+                {/* Row 2: FX Toggles */}
                 <div className="flex items-center justify-between gap-2">
-                    {/* GLOW Toggle */}
                     <button
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={() => setGlowEffect(!glowEffect)}
@@ -154,10 +148,9 @@ export function ModularIsland({
                             ${glowEffect ? 'bg-cyan-600 text-white' : 'bg-slate-700 text-slate-400'}
                         `}
                     >
-                        <span>✨ Glow</span>
+                        ✨ Glow
                     </button>
 
-                    {/* POP Toggle */}
                     <button
                         onMouseDown={(e) => e.stopPropagation()}
                         onClick={() => setPopEffect(!popEffect)}
@@ -166,7 +159,7 @@ export function ModularIsland({
                             ${popEffect ? 'bg-pink-600 text-white' : 'bg-slate-700 text-slate-400'}
                         `}
                     >
-                        <span>💥 Pop</span>
+                        💥 Pop
                     </button>
 
                     <button
@@ -181,17 +174,14 @@ export function ModularIsland({
                     </button>
                 </div>
 
-                {/* Cursor Position Slider */}
-                <div className="w-full pt-1" onMouseDown={(e) => e.stopPropagation()}>
+                {/* Cursor Slider */}
+                <div className={`w-full pt-1 transition-opacity duration-200 ${isLocked ? 'opacity-100' : 'opacity-30 pointer-events-none'}`} onMouseDown={(e) => e.stopPropagation()}>
                     <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-mono">
-                        <span>Cursor Pos</span>
+                        <span>Cursor Anchor</span>
                         <span>{Math.round(cursorPosition * 100)}%</span>
                     </div>
                     <input
-                        type="range"
-                        min="0.2"
-                        max="0.8"
-                        step="0.01"
+                        type="range" min="0.2" max="0.8" step="0.01"
                         value={cursorPosition}
                         onChange={(e) => setCursorPosition(parseFloat(e.target.value))}
                         className="w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-cyan-400"

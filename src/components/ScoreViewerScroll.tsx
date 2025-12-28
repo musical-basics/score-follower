@@ -19,6 +19,7 @@ interface ScoreViewerProps {
     glowEffect: boolean         // <--- NEW PROP
     jumpEffect: boolean         // <--- NEW PROP
     cursorPosition: number
+    isLocked: boolean
 }
 
 type NoteData = {
@@ -29,7 +30,7 @@ type NoteData = {
     stemElement: HTMLElement | null
 }
 
-export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, revealMode, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition }: ScoreViewerProps) {
+export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, revealMode, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition, isLocked }: ScoreViewerProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const cursorRef = useRef<HTMLDivElement>(null)
     const curtainRef = useRef<HTMLDivElement>(null)
@@ -461,14 +462,25 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
                 // DYNAMIC TARGET: Use user defined percentage
                 const targetScrollLeft = cursorX - (containerWidth * cursorPosition)
 
-                const currentScroll = container.scrollLeft
-                const diff = Math.abs(currentScroll - targetScrollLeft)
-                const isUserControlling = diff > 250
+                // A. LOCKED MODE (Continuous Scroll)
+                if (isLocked) {
+                    const currentScroll = container.scrollLeft
+                    const diff = Math.abs(currentScroll - targetScrollLeft)
+                    const isUserControlling = diff > 250
 
-                if (!isUserControlling) container.scrollLeft = targetScrollLeft
+                    if (!isUserControlling) container.scrollLeft = targetScrollLeft
 
-                if (currentMeasureIndex !== lastMeasureIndexRef.current && diff > 50) {
-                    container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' })
+                    if (currentMeasureIndex !== lastMeasureIndexRef.current && diff > 50) {
+                        container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' })
+                    }
+                }
+                // B. FREE MODE (Measure Scroll)
+                else {
+                    // Only scroll when we enter a NEW measure
+                    if (currentMeasureIndex !== lastMeasureIndexRef.current) {
+                        // Snap the new measure to the anchor point
+                        container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' })
+                    }
                 }
             }
 
@@ -592,7 +604,7 @@ export function ScoreViewerScroll({ audioRef, anchors, mode, musicXmlUrl, reveal
         } catch (err) {
             console.error('Error positioning cursor:', err)
         }
-    }, [findCurrentMeasure, isLoaded, mode, revealMode, updateMeasureVisibility, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition])
+    }, [findCurrentMeasure, isLoaded, mode, revealMode, updateMeasureVisibility, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition, isLocked])
 
     // ... (Animation Loop)
     useEffect(() => {

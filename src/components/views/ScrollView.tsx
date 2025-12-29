@@ -520,6 +520,11 @@ export function ScrollView({ audioRef, anchors, mode, musicXmlUrl, revealMode, p
 
                     curtainRef.current.style.left = `${curtainStart}px`
                     curtainRef.current.style.width = `${requiredWidth}px`
+                    // FIX: Match height to full score content for vertical scrolling
+                    const scrollHeight = containerRef.current?.scrollHeight || 0
+                    const clientHeight = containerRef.current?.clientHeight || 0
+                    curtainRef.current.style.height = `${Math.max(scrollHeight, clientHeight)}px`
+                    curtainRef.current.style.bottom = 'auto'
                 } else {
                     curtainRef.current.style.display = 'none'
                     curtainRef.current.style.width = '0px'
@@ -692,7 +697,7 @@ export function ScrollView({ audioRef, anchors, mode, musicXmlUrl, revealMode, p
     }, [anchors, audioRef])
 
     return (
-        <div ref={scrollContainerRef} className="relative w-full h-full overflow-x-auto overflow-y-hidden bg-white">
+        <div ref={scrollContainerRef} className="relative w-full h-full overflow-auto bg-white">
             <div ref={containerRef} onClick={handleScoreClick} className="w-full min-h-[400px] cursor-pointer" />
 
             {/* The Cursor */}

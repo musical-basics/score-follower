@@ -479,7 +479,12 @@ export function ScrollView({ audioRef, anchors, mode, musicXmlUrl, revealMode, p
                 const targetScrollLeft = cursorX - (containerWidth * cursorPosition)
 
                 // A. LOCKED MODE (Continuous Scroll)
-                if (isLocked) {
+                // Only enforce lock when Playing to allow manual navigation when Paused
+                const isPlaying = audioRef.current && !audioRef.current.paused && mode !== 'RECORD' // Record mode handles its own flow? Or treat same?
+                // Actually, simply checking !paused covers Playback. Record might not have audioRef playing? 
+                // Let's stick to audioRef.paused check as primary gate for Playback.
+
+                if (isLocked && isPlaying) {
                     const currentScroll = container.scrollLeft
                     const diff = Math.abs(currentScroll - targetScrollLeft)
                     const isUserControlling = diff > 250
@@ -697,7 +702,7 @@ export function ScrollView({ audioRef, anchors, mode, musicXmlUrl, revealMode, p
     }, [anchors, audioRef])
 
     return (
-        <div ref={scrollContainerRef} className="relative w-full h-full overflow-auto bg-white">
+        <div ref={scrollContainerRef} className="relative w-full h-full overflow-auto overscroll-none bg-white">
             <div ref={containerRef} onClick={handleScoreClick} className="w-full min-h-[400px] cursor-pointer" />
 
             {/* The Cursor */}
